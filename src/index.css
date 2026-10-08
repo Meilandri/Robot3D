@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@theme {
+  --color-workshop-50: var(--color-sky-50);
+  --color-workshop-100: var(--color-sky-100);
+  --color-workshop-200: var(--color-sky-200);
+  --color-workshop-300: var(--color-sky-300);
+  --color-workshop-400: var(--color-sky-400);
+  --color-workshop-500: var(--color-sky-500);
+  --color-workshop-600: var(--color-sky-600);
+  --color-workshop-700: var(--color-sky-700);
+  --color-workshop-800: var(--color-sky-800);
+  --color-workshop-900: var(--color-sky-900);
+}
+
+.bubble-tail::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 10px solid #ffffff;
+  filter: drop-shadow(0 2px 2px rgba(186, 230, 253, 0.5));
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
