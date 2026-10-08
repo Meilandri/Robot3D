@@ -4,7 +4,19 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Wrench, Send, X, History, MessageCircle, Plus, Trash2, Copy, Check } from 'lucide-react';
+import {
+  Wrench,
+  Send,
+  X,
+  History,
+  MessageCircle,
+  Plus,
+  Trash2,
+  Copy,
+  Check,
+  ChevronDown,
+  Cpu,
+} from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import hljs from 'highlight.js/lib/core';
@@ -26,6 +38,28 @@ const STORAGE_KEY = 'robocraft_sessions';
 const MAX_SESSIONS = 30;
 const GREETING = { sender: 'bot', text: 'Halo! Ada yang bisa kubantu hari ini?' };
 
+// Pilihan model AI (NVIDIA Build). Daftar id ini HARUS sama dengan MODELS di api/chat.js
+const MODEL_KEY = 'robocraft_model';
+const MODEL_OPTIONS = [
+  { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', label: 'Nemotron Lightning (cepat)' },
+  { id: 'nvidia/nemotron-3-super-120b-a12b', label: 'Nemotron Super (seimbang)' },
+  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6 (paling pintar)' },
+];
+const DEFAULT_MODEL = MODEL_OPTIONS[0].id; // sama dengan model bawaan di api/chat.js
+
+const namaModel = (id) => MODEL_OPTIONS.find((o) => o.id === id)?.label ?? id;
+
+const loadModel = () => {
+  try {
+    const saved = localStorage.getItem(MODEL_KEY);
+    return MODEL_OPTIONS.some((o) => o.id === saved) ? saved : DEFAULT_MODEL;
+  } catch {
+    return DEFAULT_MODEL;
+  }
+};
+
+const SARAN_PERTANYAAN = ['Cara kerja ESP32', 'Troubleshooting Sensor', 'Bahasa Pemrograman IoT'];
+
 const newId = () => `chat_${Date.now()}`;
 
 const loadSessions = () => {
@@ -46,6 +80,7 @@ const formatTanggal = (ms) =>
     minute: '2-digit',
   });
 
+// Samakan posisi Hips antar animasi agar robot tidak "melompat" saat animasi berganti
 const cariTrackHips = (clip) =>
   clip.tracks.find((t) => /(hips|pelvis)\.position$/i.test(t.name));
 
@@ -65,6 +100,9 @@ const samakanPosisiHips = (clip, acuan) => {
   }
 };
 
+// ---------------------------------------------------------------
+// Markdown dan code block untuk jawaban AI
+// ---------------------------------------------------------------
 hljs.registerLanguage('javascript', javascript);
 hljs.registerLanguage('typescript', typescript);
 hljs.registerLanguage('python', python);
@@ -133,9 +171,13 @@ function CodeBlock({ code, lang }) {
           type="button"
           onClick={handleCopy}
           aria-label={copied ? 'Kode tersalin' : 'Salin kode'}
-          className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white rounded px-1.5 py-0.5 hover:bg-slate-700 transition"
+          className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white rounded px-1.5 py-0.5 hover:bg-slate-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
         >
-          {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? (
+            <Check className="w-3.5 h-3.5 text-emerald-400" />
+          ) : (
+            <Copy className="w-3.5 h-3.5" />
+          )}
           {copied ? 'Tersalin' : 'Salin'}
         </button>
       </div>
@@ -167,17 +209,38 @@ const mdComponents = {
   strong: ({ children }) => <strong className="font-bold">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-sky-600 underline underline-offset-2 break-words">
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-sky-600 underline underline-offset-2 break-words"
+    >
       {children}
     </a>
   ),
-  blockquote: ({ children }) => <blockquote className="my-1.5 pl-3 border-l-2 border-slate-300 text-slate-600">{children}</blockquote>,
+  blockquote: ({ children }) => (
+    <blockquote className="my-1.5 pl-3 border-l-2 border-slate-300 text-slate-600">
+      {children}
+    </blockquote>
+  ),
   hr: () => <hr className="my-2 border-slate-300" />,
-  table: ({ children }) => <div className="my-2 overflow-x-auto"><table className="text-xs border-collapse">{children}</table></div>,
-  th: ({ children }) => <th className="border border-slate-300 bg-slate-200/70 px-2 py-1 text-left font-bold">{children}</th>,
+  table: ({ children }) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="text-xs border-collapse">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border border-slate-300 bg-slate-200/70 px-2 py-1 text-left font-bold">
+      {children}
+    </th>
+  ),
   td: ({ children }) => <td className="border border-slate-300 px-2 py-1">{children}</td>,
   pre: PreBlock,
-  code: ({ children }) => <code className="px-1 py-0.5 rounded bg-slate-200 text-slate-800 text-[0.85em] font-mono break-words">{children}</code>,
+  code: ({ children }) => (
+    <code className="px-1 py-0.5 rounded bg-slate-200 text-slate-800 text-[0.85em] font-mono break-words">
+      {children}
+    </code>
+  ),
 };
 
 export default function App() {
@@ -192,6 +255,7 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState([GREETING]);
+  const [selectedModel, setSelectedModel] = useState(loadModel);
 
   const [sessions, setSessions] = useState(loadSessions);
   const [activeId, setActiveId] = useState(newId);
@@ -220,11 +284,11 @@ export default function App() {
       clearTimeout(bubbleTimerRef.current);
       setComicBubble(text);
       playAnimation('talking');
-      const durasi = Math.min(Math.max(text.length * 60, 2500), 15000);
-      talkTimerRef.current = setTimeout(() => {
-        playAnimation('idle');
-        setComicBubble(null);
-      }, durasi);
+      // Animasi bicara berhenti lebih dulu, tapi gelembung bertahan lebih lama agar sempat dibaca
+      const durasiBicara = Math.min(Math.max(text.length * 60, 2500), 15000);
+      const durasiGelembung = Math.min(Math.max(text.length * 90, 8000), 45000);
+      talkTimerRef.current = setTimeout(() => playAnimation('idle'), durasiBicara);
+      bubbleTimerRef.current = setTimeout(() => setComicBubble(null), durasiGelembung);
     },
     [playAnimation]
   );
@@ -236,6 +300,9 @@ export default function App() {
     setComicBubble(null);
   }, [playAnimation]);
 
+  // ---------------------------------------------------------------
+  // 3D: scene, model, animasi
+  // ---------------------------------------------------------------
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
@@ -245,7 +312,12 @@ export default function App() {
     let model = null;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(
+      40,
+      container.clientWidth / container.clientHeight,
+      0.1,
+      1000
+    );
     camera.position.set(0, 1.2, 4.5);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -412,6 +484,9 @@ export default function App() {
     };
   }, [playAnimation]);
 
+  // ---------------------------------------------------------------
+  // Riwayat percakapan dan pilihan model
+  // ---------------------------------------------------------------
   useEffect(() => {
     const pertanyaanPertama = messages.find((m) => m.sender === 'user');
     if (!pertanyaanPertama) return;
@@ -433,8 +508,19 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-    } catch { }
+    } catch {
+      /* penyimpanan penuh atau diblokir: abaikan */
+    }
   }, [sessions]);
+
+  // Ingat model pilihan pengguna
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODEL_KEY, selectedModel);
+    } catch {
+      /* abaikan */
+    }
+  }, [selectedModel]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -482,7 +568,9 @@ export default function App() {
     setIsLogOpen(true);
   };
 
-  // Fungsi Kirim Pesan via Vercel Serverless Function (/api/chat)
+  // ---------------------------------------------------------------
+  // Kirim pesan lewat Vercel Serverless Function (/api/chat)
+  // ---------------------------------------------------------------
   const handleSendMessage = async (e, customText = null) => {
     if (e) e.preventDefault();
     const query = (customText !== null ? customText : chatInput).trim();
@@ -500,10 +588,8 @@ export default function App() {
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: query }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: query, model: selectedModel }),
       });
 
       const data = await response.json();
@@ -512,7 +598,11 @@ export default function App() {
       }
 
       const reply = data.reply || 'Hmm, aku belum punya jawaban untuk itu.';
-      setMessages((prev) => [...prev, { sender: 'bot', text: reply }]);
+      setMessages((prev) => [
+        ...prev,
+        // usedModel dari server menunjukkan model yang benar-benar menjawab
+        { sender: 'bot', text: reply, model: data.usedModel || selectedModel },
+      ]);
 
       const polos = reply
         .replace(/```[\s\S]*?(```|$)/g, ' ')
@@ -522,7 +612,12 @@ export default function App() {
       speak(polos || 'Ini jawabannya!');
     } catch (error) {
       console.error('Error:', error);
-      const errorMsg = 'Maaf, terjadi gangguan pada sistem sirkuit server.';
+      const sibuk = /429|503|UNAVAILABLE|overloaded|high demand|rate limit|too many requests/i.test(
+        String(error?.message)
+      );
+      const errorMsg = sibuk
+        ? `${namaModel(selectedModel)} sedang sibuk atau batas permintaan tercapai. Coba pilih model lain di dropdown, atau kirim ulang sebentar lagi ya.`
+        : 'Maaf, terjadi gangguan pada sistem sirkuit server.';
       setMessages((prev) => [...prev, { sender: 'bot', text: errorMsg }]);
       speak(errorMsg);
     } finally {
@@ -530,10 +625,14 @@ export default function App() {
     }
   };
 
+  // ---------------------------------------------------------------
+  // Tampilan
+  // ---------------------------------------------------------------
   const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400';
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-sky-100 text-slate-800 font-sans select-none antialiased">
+      {/* HEADER */}
       <header className="h-16 px-6 z-30 flex items-center border-b border-workshop-200/80 bg-white/80 backdrop-blur-md shadow-sm shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-400 to-workshop-300 flex items-center justify-center text-white shadow-md shadow-sky-200 border border-white">
@@ -550,13 +649,21 @@ export default function App() {
         </div>
       </header>
 
+      {/* AREA BENGKEL */}
       <main className="relative flex-1 w-full h-[calc(100vh-4rem)] overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <img alt="Workshop Garage Background" className="w-full h-full object-cover object-center" src="/garasi.JPEG" />
+          <img
+            alt="Workshop Garage Background"
+            className="w-full h-full object-cover object-center"
+            src="/garasi.JPEG"
+          />
           <div className="absolute inset-0 bg-sky-900/10 backdrop-contrast-[1.02] pointer-events-none"></div>
         </div>
 
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-auto z-10" ref={mountRef}></div>
+        <div
+          className="absolute inset-0 flex items-center justify-center pointer-events-auto z-10"
+          ref={mountRef}
+        ></div>
 
         <button
           onClick={() => setIsHistoryOpen(true)}
@@ -568,25 +675,54 @@ export default function App() {
         </button>
 
         {comicBubble && (
-          <div className="absolute top-[18%] left-[57%] max-w-[min(220px,38%)] bg-white text-slate-800 p-4 rounded-3xl rounded-bl-none shadow-2xl border-2 border-sky-200 z-20">
-            <p className="text-sm font-bold leading-relaxed line-clamp-5">{comicBubble}</p>
-            <div className="absolute -bottom-2 left-0 w-4 h-4 bg-white border-b-2 border-l-2 border-sky-200 transform -translate-x-1 rotate-[-45deg] z-[-1]"></div>
+          <div className="absolute top-[14%] left-[57%] w-[min(280px,40%)] bg-white text-slate-800 rounded-3xl shadow-2xl border-2 border-sky-200 z-20">
+            {/* Tombol tutup */}
+            <button
+              type="button"
+              onClick={() => setComicBubble(null)}
+              aria-label="Tutup gelembung ucapan"
+              title="Tutup"
+              className={`absolute top-1.5 right-1.5 z-10 p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition ${focusRing}`}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Teks lengkap; kalau panjang, bisa digulir di dalam gelembung */}
+            <div className="max-h-[38vh] overflow-y-auto overscroll-contain pl-4 pr-7 py-3.5 select-text">
+              <p className="text-sm font-bold leading-relaxed whitespace-pre-line break-words">
+                {comicBubble}
+              </p>
+            </div>
+
+            {/* Ekor gelembung (menunjuk ke arah kepala robot) */}
+            <div className="absolute top-6 -left-[9px] w-4 h-4 bg-white border-b-2 border-l-2 border-sky-200 rotate-45"></div>
           </div>
         )}
 
-        {isHistoryOpen && <div className="absolute inset-0 z-40 bg-slate-900/20" onClick={() => setIsHistoryOpen(false)} aria-hidden="true" />}
+        {isHistoryOpen && (
+          <div
+            className="absolute inset-0 z-40 bg-slate-900/20"
+            onClick={() => setIsHistoryOpen(false)}
+            aria-hidden="true"
+          />
+        )}
 
+        {/* Drawer riwayat */}
         <aside
           aria-label="Riwayat percakapan"
           aria-hidden={!isHistoryOpen}
-          className={`absolute inset-y-0 left-0 z-50 w-80 max-w-[85%] flex flex-col bg-white/95 backdrop-blur-xl border-r border-workshop-200 shadow-2xl transition-[transform,visibility] duration-300 ${isHistoryOpen ? 'translate-x-0 visible' : '-translate-x-full invisible'
+          className={`absolute inset-y-0 left-0 z-50 w-80 max-w-[85%] flex flex-col bg-white/95 backdrop-blur-xl border-r border-workshop-200 shadow-2xl transition-[transform,visibility] duration-300 motion-reduce:transition-none ${isHistoryOpen ? 'translate-x-0 visible' : '-translate-x-full invisible'
             }`}
         >
           <div className="p-5 pb-3 flex items-center justify-between shrink-0">
             <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
               <History className="w-5 h-5 text-sky-500" /> Riwayat percakapan
             </h2>
-            <button onClick={() => setIsHistoryOpen(false)} aria-label="Tutup riwayat" className={`p-1.5 rounded-full hover:bg-slate-100 text-slate-500 transition ${focusRing}`}>
+            <button
+              onClick={() => setIsHistoryOpen(false)}
+              aria-label="Tutup riwayat"
+              className={`p-1.5 rounded-full hover:bg-slate-100 text-slate-500 transition ${focusRing}`}
+            >
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -611,10 +747,14 @@ export default function App() {
                     <button
                       onClick={() => openSession(s)}
                       disabled={isLoading}
-                      className={`w-full text-left p-3 rounded-xl border transition disabled:opacity-60 ${focusRing} ${s.id === activeId ? 'bg-sky-50 border-sky-200' : 'bg-slate-50 border-slate-100 hover:border-sky-200'
+                      className={`w-full text-left p-3 rounded-xl border transition disabled:opacity-60 ${focusRing} ${s.id === activeId
+                          ? 'bg-sky-50 border-sky-200'
+                          : 'bg-slate-50 border-slate-100 hover:border-sky-200'
                         }`}
                     >
-                      <div className="text-xs text-slate-400 mb-0.5">{formatTanggal(s.updatedAt)}</div>
+                      <div className="text-xs text-slate-400 mb-0.5">
+                        {formatTanggal(s.updatedAt)}
+                      </div>
                       <div className="text-sm font-medium text-slate-700 truncate">{s.title}</div>
                     </button>
                   </li>
@@ -624,6 +764,7 @@ export default function App() {
           </div>
         </aside>
 
+        {/* Log chat (panel kanan, dibuka manual) */}
         {isLogOpen && (
           <section
             aria-label="Log chat dengan Sparky"
@@ -635,39 +776,69 @@ export default function App() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold text-slate-800 leading-tight">Log chat</div>
-                <div className="text-xs text-slate-500 leading-tight">{isLoading ? 'Sparky sedang mengetik...' : 'Percakapan dengan Sparky'}</div>
+                <div className="text-xs text-slate-500 leading-tight">
+                  {isLoading ? 'Sparky sedang mengetik...' : 'Percakapan dengan Sparky'}
+                </div>
               </div>
               <button
                 onClick={handleClearChat}
                 disabled={isLoading || messages.length <= 1}
-                aria-label="Hapus percakapan ini"
-                title="Hapus percakapan ini"
-                className={`flex items-center gap-1 p-1.5 rounded-full transition disabled:opacity-40 ${focusRing} ${confirmClear ? 'bg-red-50 text-red-600 hover:bg-red-100 px-2.5' : 'text-slate-500 hover:bg-slate-100'
+                aria-label={
+                  confirmClear ? 'Klik lagi untuk menghapus percakapan' : 'Hapus percakapan ini'
+                }
+                title={confirmClear ? 'Klik lagi untuk menghapus' : 'Hapus percakapan ini'}
+                className={`flex items-center gap-1 p-1.5 rounded-full transition disabled:opacity-40 ${focusRing} ${confirmClear
+                    ? 'bg-red-50 text-red-600 hover:bg-red-100 px-2.5'
+                    : 'text-slate-500 hover:bg-slate-100'
                   }`}
               >
                 <Trash2 className="w-4 h-4" />
                 {confirmClear && <span className="text-xs font-bold">Hapus?</span>}
               </button>
-              <button onClick={() => setIsLogOpen(false)} aria-label="Tutup log chat" className={`p-1.5 rounded-full hover:bg-slate-100 text-slate-500 transition ${focusRing}`}>
+              <button
+                onClick={() => setIsLogOpen(false)}
+                aria-label="Tutup log chat"
+                className={`p-1.5 rounded-full hover:bg-slate-100 text-slate-500 transition ${focusRing}`}
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div ref={listRef} role="log" aria-live="polite" className="flex-1 overflow-y-auto px-3 py-3 space-y-2 select-text">
+            <div
+              ref={listRef}
+              role="log"
+              aria-live="polite"
+              className="flex-1 overflow-y-auto px-3 py-3 space-y-2 select-text"
+            >
               {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  key={i}
+                  className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
                   <div
-                    className={`min-w-0 px-3.5 py-2 text-sm leading-relaxed break-words shadow-sm ${m.sender === 'user'
-                        ? 'max-w-[85%] whitespace-pre-wrap bg-sky-500 text-white rounded-2xl rounded-br-md'
-                        : 'max-w-[94%] bg-slate-100 text-slate-800 rounded-2xl rounded-bl-md'
+                    className={`min-w-0 flex flex-col ${m.sender === 'user' ? 'items-end max-w-[85%]' : 'items-start max-w-[94%]'
                       }`}
                   >
-                    {m.sender === 'user' ? (
-                      m.text
-                    ) : (
-                      <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                        {m.text}
-                      </Markdown>
+                    <div
+                      className={`min-w-0 max-w-full px-3.5 py-2 text-sm leading-relaxed break-words shadow-sm ${m.sender === 'user'
+                          ? 'whitespace-pre-wrap bg-sky-500 text-white rounded-2xl rounded-br-md'
+                          : 'bg-slate-100 text-slate-800 rounded-2xl rounded-bl-md'
+                        }`}
+                    >
+                      {m.sender === 'user' ? (
+                        m.text
+                      ) : (
+                        <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                          {m.text}
+                        </Markdown>
+                      )}
+                    </div>
+
+                    {/* Nama model yang menjawab */}
+                    {m.sender === 'bot' && m.model && (
+                      <span className="mt-0.5 px-1 text-[11px] text-slate-400">
+                        {namaModel(m.model)}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -675,9 +846,16 @@ export default function App() {
 
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-slate-100 rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1">
+                  <div
+                    className="bg-slate-100 rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1"
+                    aria-label="Sparky sedang mengetik"
+                  >
                     {[0, 150, 300].map((delay) => (
-                      <span key={delay} className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                      <span
+                        key={delay}
+                        className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none"
+                        style={{ animationDelay: `${delay}ms` }}
+                      />
                     ))}
                   </div>
                 </div>
@@ -686,29 +864,49 @@ export default function App() {
           </section>
         )}
 
-        {/* Kontainer Bawah: Quick Prompt Chips + Form Input */}
+        {/* Bagian bawah: saran pertanyaan, pilihan model, dan kolom input */}
         <div className="absolute z-30 bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-2xl flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            {/* Saran pertanyaan cepat */}
+            <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {SARAN_PERTANYAAN.map((chipText) => (
+                <button
+                  key={chipText}
+                  type="button"
+                  onClick={() => handleSendMessage(null, chipText)}
+                  disabled={isLoading}
+                  className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full bg-white/80 hover:bg-sky-500 hover:text-white border border-workshop-200 text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition disabled:opacity-50 ${focusRing}`}
+                >
+                  {chipText}
+                </button>
+              ))}
+            </div>
 
-          {/* ✨ TOMBOL SARAN PERTANYAAN CEPAT (QUICK PROMPT CHIPS) */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 px-1 scrollbar-none">
-            {[
-              "Cara kerja ESP32",
-              "Troubleshooting Sensor",
-              "Bahasa Pemrograman IoT"
-            ].map((chipText, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSendMessage(null, chipText)}
+            {/* Dropdown pilihan model AI */}
+            <div className="relative shrink-0 pb-1">
+              <label htmlFor="model-ai" className="sr-only">
+                Pilih model AI
+              </label>
+              <Cpu className="pointer-events-none absolute left-2.5 top-[calc(50%-2px)] -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+              <select
+                id="model-ai"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={isLoading}
-                className="whitespace-nowrap px-3 py-1.5 rounded-full bg-white/80 hover:bg-sky-500 hover:text-white border border-workshop-200 text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition disabled:opacity-50"
+                title="Pilih model AI"
+                className={`appearance-none cursor-pointer rounded-full bg-white/80 hover:border-sky-400 border border-workshop-200 pl-8 pr-7 py-1.5 text-base sm:text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`}
               >
-                {chipText}
-              </button>
-            ))}
+                {MODEL_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-[calc(50%-2px)] -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+            </div>
           </div>
 
-          {/* Form Input Chat */}
+          {/* Kolom input chat */}
           <form
             onSubmit={(e) => handleSendMessage(e)}
             className="flex items-center gap-2 rounded-full border-2 border-workshop-200 bg-white/90 backdrop-blur-xl shadow-2xl px-3 py-2.5"
@@ -717,6 +915,8 @@ export default function App() {
               type="button"
               onClick={() => setIsLogOpen((v) => !v)}
               aria-label={isLogOpen ? 'Tutup log chat' : 'Lihat log chat'}
+              aria-pressed={isLogOpen}
+              title={isLogOpen ? 'Tutup log chat' : 'Lihat log chat'}
               className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition ${focusRing} ${isLogOpen ? 'bg-sky-100 text-sky-600' : 'text-slate-500 hover:bg-slate-100'
                 }`}
             >
