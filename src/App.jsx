@@ -58,6 +58,8 @@ const loadModel = () => {
   }
 };
 
+const MIN_LOADING_MS = 2000; // layar pemuatan tampil minimal sekian milidetik
+
 const SARAN_PERTANYAAN = ['Cara kerja ESP32', 'Troubleshooting Sensor', 'Bahasa Pemrograman IoT'];
 
 const newId = () => `chat_${Date.now()}`;
@@ -250,7 +252,14 @@ export default function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [comicBubble, setComicBubble] = useState('Halo! Ada yang bisa kubantu?');
+  const [comicBubble, setComicBubble] = useState(null);
+
+  // Layar pemuatan: tampil sampai model siap DAN sudah lewat waktu minimum
+  const [isModelReady, setIsModelReady] = useState(false);
+  const [minTimePassed, setMinTimePassed] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loaderGone, setLoaderGone] = useState(false);
+  const siapTampil = isModelReady && minTimePassed;
 
   const [chatInput, setChatInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -441,10 +450,13 @@ export default function App() {
           }
         });
 
-        playAnimation('waving');
+        // Pose awal disiapkan di belakang layar pemuatan; wave dimulai saat layar memudar
+        playAnimation('idle');
+        setIsModelReady(true);
       })
       .catch((err) => {
         console.error('Gagal memuat model:', err);
+        if (!disposed) setLoadError(true);
       });
 
     const handleResize = () => {
@@ -463,8 +475,6 @@ export default function App() {
       renderer.render(scene, camera);
     };
     animate();
-
-    bubbleTimerRef.current = setTimeout(() => setComicBubble(null), 5000);
 
     return () => {
       disposed = true;
@@ -550,6 +560,28 @@ export default function App() {
   useEffect(() => {
     if (isLoading) setIsModelOpen(false);
   }, [isLoading]);
+
+  // Layar pemuatan tampil minimal MIN_LOADING_MS agar tidak berkedip
+  useEffect(() => {
+    const t = setTimeout(() => setMinTimePassed(true), MIN_LOADING_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Begitu layar pemuatan mulai memudar: robot melambai dan menyapa
+  useEffect(() => {
+    if (!siapTampil) return;
+    playAnimation('waving');
+    setComicBubble('Halo! Ada yang bisa kubantu?');
+    bubbleTimerRef.current = setTimeout(() => setComicBubble(null), 5000);
+    return () => clearTimeout(bubbleTimerRef.current);
+  }, [siapTampil, playAnimation]);
+
+  // Setelah transisi memudar selesai, copot layar dari DOM
+  useEffect(() => {
+    if (!siapTampil) return;
+    const t = setTimeout(() => setLoaderGone(true), 800);
+    return () => clearTimeout(t);
+  }, [siapTampil]);
 
   const pilihModel = (id) => {
     setSelectedModel(id);
@@ -766,9 +798,8 @@ export default function App() {
         <aside
           aria-label="Riwayat percakapan"
           aria-hidden={!isHistoryOpen}
-          className={`absolute inset-y-0 left-0 z-50 w-80 max-w-[85%] flex flex-col bg-white/95 backdrop-blur-xl border-r border-workshop-200 shadow-2xl transition-[transform,visibility] duration-300 motion-reduce:transition-none ${
-            isHistoryOpen ? 'translate-x-0 visible' : '-translate-x-full invisible'
-          }`}
+          className={`absolute inset-y-0 left-0 z-50 w-80 max-w-[85%] flex flex-col bg-white/95 backdrop-blur-xl border-r border-workshop-200 shadow-2xl transition-[transform,visibility] duration-300 motion-reduce:transition-none ${isHistoryOpen ? 'translate-x-0 visible' : '-translate-x-full invisible'
+            }`}
         >
           <div className="p-5 pb-3 flex items-center justify-between shrink-0">
             <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
@@ -803,11 +834,10 @@ export default function App() {
                     <button
                       onClick={() => openSession(s)}
                       disabled={isLoading}
-                      className={`w-full text-left p-3 rounded-xl border transition disabled:opacity-60 ${focusRing} ${
-                        s.id === activeId
-                          ? 'bg-sky-50 border-sky-200'
-                          : 'bg-slate-50 border-slate-100 hover:border-sky-200'
-                      }`}
+                      className={`w-full text-left p-3 rounded-xl border transition disabled:opacity-60 ${focusRing} ${s.id === activeId
+                        ? 'bg-sky-50 border-sky-200'
+                        : 'bg-slate-50 border-slate-100 hover:border-sky-200'
+                        }`}
                     >
                       <div className="text-xs text-slate-400 mb-0.5">
                         {formatTanggal(s.updatedAt)}
@@ -844,11 +874,10 @@ export default function App() {
                   confirmClear ? 'Klik lagi untuk menghapus percakapan' : 'Hapus percakapan ini'
                 }
                 title={confirmClear ? 'Klik lagi untuk menghapus' : 'Hapus percakapan ini'}
-                className={`flex items-center gap-1 p-1.5 rounded-full transition disabled:opacity-40 ${focusRing} ${
-                  confirmClear
-                    ? 'bg-red-50 text-red-600 hover:bg-red-100 px-2.5'
-                    : 'text-slate-500 hover:bg-slate-100'
-                }`}
+                className={`flex items-center gap-1 p-1.5 rounded-full transition disabled:opacity-40 ${focusRing} ${confirmClear
+                  ? 'bg-red-50 text-red-600 hover:bg-red-100 px-2.5'
+                  : 'text-slate-500 hover:bg-slate-100'
+                  }`}
               >
                 <Trash2 className="w-4 h-4" />
                 {confirmClear && <span className="text-xs font-bold">Hapus?</span>}
@@ -874,16 +903,14 @@ export default function App() {
                   className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`min-w-0 flex flex-col ${
-                      m.sender === 'user' ? 'items-end max-w-[85%]' : 'items-start max-w-[94%]'
-                    }`}
+                    className={`min-w-0 flex flex-col ${m.sender === 'user' ? 'items-end max-w-[85%]' : 'items-start max-w-[94%]'
+                      }`}
                   >
                     <div
-                      className={`min-w-0 max-w-full px-3.5 py-2 text-sm leading-relaxed break-words shadow-sm ${
-                        m.sender === 'user'
-                          ? 'whitespace-pre-wrap bg-sky-500 text-white rounded-2xl rounded-br-md'
-                          : 'bg-slate-100 text-slate-800 rounded-2xl rounded-bl-md'
-                      }`}
+                      className={`min-w-0 max-w-full px-3.5 py-2 text-sm leading-relaxed break-words shadow-sm ${m.sender === 'user'
+                        ? 'whitespace-pre-wrap bg-sky-500 text-white rounded-2xl rounded-br-md'
+                        : 'bg-slate-100 text-slate-800 rounded-2xl rounded-bl-md'
+                        }`}
                     >
                       {m.sender === 'user' ? (
                         m.text
@@ -958,9 +985,8 @@ export default function App() {
                 <Cpu className="w-3.5 h-3.5 text-slate-500" />
                 {namaModel(selectedModel)}
                 <ChevronUp
-                  className={`w-3.5 h-3.5 text-slate-500 transition-transform ${
-                    isModelOpen ? '' : 'rotate-180'
-                  }`}
+                  className={`w-3.5 h-3.5 text-slate-500 transition-transform ${isModelOpen ? '' : 'rotate-180'
+                    }`}
                 />
               </button>
 
@@ -983,9 +1009,8 @@ export default function App() {
                         role="option"
                         aria-selected={aktif}
                         onClick={() => pilihModel(o.id)}
-                        className={`w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left transition ${focusRing} ${
-                          aktif ? 'bg-sky-50 text-sky-700' : 'text-slate-700 hover:bg-slate-100'
-                        }`}
+                        className={`w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left transition ${focusRing} ${aktif ? 'bg-sky-50 text-sky-700' : 'text-slate-700 hover:bg-slate-100'
+                          }`}
                       >
                         <span className="flex-1 min-w-0">
                           <span className="block text-sm font-semibold leading-tight">
@@ -1015,9 +1040,8 @@ export default function App() {
               aria-label={isLogOpen ? 'Tutup log chat' : 'Lihat log chat'}
               aria-pressed={isLogOpen}
               title={isLogOpen ? 'Tutup log chat' : 'Lihat log chat'}
-              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition ${focusRing} ${
-                isLogOpen ? 'bg-sky-100 text-sky-600' : 'text-slate-500 hover:bg-slate-100'
-              }`}
+              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition ${focusRing} ${isLogOpen ? 'bg-sky-100 text-sky-600' : 'text-slate-500 hover:bg-slate-100'
+                }`}
             >
               <MessageCircle className="w-5 h-5" />
             </button>
@@ -1041,6 +1065,50 @@ export default function App() {
           </form>
         </div>
       </main>
+
+      {/* LAYAR PEMUATAN: tampil sampai robot siap, lalu memudar */}
+      {!loaderGone && (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy={!siapTampil}
+          className={`fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 bg-gradient-to-b from-sky-100 via-sky-50 to-sky-200 transition-opacity duration-700 motion-reduce:transition-none ${siapTampil ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            }`}
+        >
+          <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-sky-400 to-workshop-300 flex items-center justify-center text-white shadow-xl shadow-sky-200 border-2 border-white animate-pulse motion-reduce:animate-none">
+            <Wrench className="w-9 h-9" />
+          </div>
+
+          <div className="text-center">
+            <div className="font-extrabold text-2xl text-slate-800 tracking-tight">
+              RoboCraft<span className="text-sky-500"> Studio</span>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              {loadError ? 'Robot gagal dimuat.' : 'Menyiapkan Sparky...'}
+            </p>
+          </div>
+
+          {loadError ? (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className={`px-4 py-2 rounded-full bg-sky-500 hover:bg-sky-600 text-white text-sm font-bold shadow-md transition ${focusRing}`}
+            >
+              Muat ulang
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5" aria-hidden="true">
+              {[0, 150, 300].map((delay) => (
+                <span
+                  key={delay}
+                  className="w-2 h-2 rounded-full bg-sky-400 animate-bounce motion-reduce:animate-none"
+                  style={{ animationDelay: `${delay}ms` }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
