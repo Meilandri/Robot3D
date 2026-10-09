@@ -14,7 +14,7 @@ import {
   Trash2,
   Copy,
   Check,
-  ChevronDown,
+  ChevronUp,
   Cpu,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
@@ -41,9 +41,9 @@ const GREETING = { sender: 'bot', text: 'Halo! Ada yang bisa kubantu hari ini?' 
 // Pilihan model AI (NVIDIA Build). Daftar id ini HARUS sama dengan MODELS di api/chat.js
 const MODEL_KEY = 'robocraft_model';
 const MODEL_OPTIONS = [
-  { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', label: 'Nemotron Lightning (cepat)' },
-  { id: 'nvidia/nemotron-3-super-120b-a12b', label: 'Nemotron Super (seimbang)' },
-  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6 (paling pintar)' },
+  { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', label: 'Nemotron Lightning', note: 'Cepat' },
+  { id: 'nvidia/nemotron-3-super-120b-a12b', label: 'Nemotron Super', note: 'Seimbang' },
+  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6', note: 'Paling pintar' },
 ];
 const DEFAULT_MODEL = MODEL_OPTIONS[0].id; // sama dengan model bawaan di api/chat.js
 
@@ -256,6 +256,12 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState([GREETING]);
   const [selectedModel, setSelectedModel] = useState(loadModel);
+
+  // Dropdown model kustom (terbuka ke atas)
+  const [isModelOpen, setIsModelOpen] = useState(false);
+  const modelWrapRef = useRef(null);
+  const modelTriggerRef = useRef(null);
+  const optionRefs = useRef([]);
 
   const [sessions, setSessions] = useState(loadSessions);
   const [activeId, setActiveId] = useState(newId);
@@ -527,6 +533,55 @@ export default function App() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, isLoading, isLogOpen]);
 
+  // Dropdown model: fokus ke pilihan aktif saat dibuka, tutup saat klik di luar
+  useEffect(() => {
+    if (!isModelOpen) return;
+    const idx = Math.max(0, MODEL_OPTIONS.findIndex((o) => o.id === selectedModel));
+    optionRefs.current[idx]?.focus();
+
+    const onPointerDown = (e) => {
+      if (!modelWrapRef.current?.contains(e.target)) setIsModelOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [isModelOpen, selectedModel]);
+
+  // Tutup dropdown saat Sparky mulai menjawab
+  useEffect(() => {
+    if (isLoading) setIsModelOpen(false);
+  }, [isLoading]);
+
+  const pilihModel = (id) => {
+    setSelectedModel(id);
+    setIsModelOpen(false);
+    modelTriggerRef.current?.focus();
+  };
+
+  // Navigasi keyboard: panah atas/bawah, Home/End, Escape
+  const handleModelKeyDown = (e) => {
+    const items = optionRefs.current.filter(Boolean);
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      items[(i + 1) % items.length]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[(i - 1 + items.length) % items.length]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsModelOpen(false);
+      modelTriggerRef.current?.focus();
+    } else if (e.key === 'Tab') {
+      setIsModelOpen(false);
+    }
+  };
+
   const startNewChat = () => {
     if (isLoading) return;
     resetRobot();
@@ -711,8 +766,9 @@ export default function App() {
         <aside
           aria-label="Riwayat percakapan"
           aria-hidden={!isHistoryOpen}
-          className={`absolute inset-y-0 left-0 z-50 w-80 max-w-[85%] flex flex-col bg-white/95 backdrop-blur-xl border-r border-workshop-200 shadow-2xl transition-[transform,visibility] duration-300 motion-reduce:transition-none ${isHistoryOpen ? 'translate-x-0 visible' : '-translate-x-full invisible'
-            }`}
+          className={`absolute inset-y-0 left-0 z-50 w-80 max-w-[85%] flex flex-col bg-white/95 backdrop-blur-xl border-r border-workshop-200 shadow-2xl transition-[transform,visibility] duration-300 motion-reduce:transition-none ${
+            isHistoryOpen ? 'translate-x-0 visible' : '-translate-x-full invisible'
+          }`}
         >
           <div className="p-5 pb-3 flex items-center justify-between shrink-0">
             <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
@@ -747,10 +803,11 @@ export default function App() {
                     <button
                       onClick={() => openSession(s)}
                       disabled={isLoading}
-                      className={`w-full text-left p-3 rounded-xl border transition disabled:opacity-60 ${focusRing} ${s.id === activeId
+                      className={`w-full text-left p-3 rounded-xl border transition disabled:opacity-60 ${focusRing} ${
+                        s.id === activeId
                           ? 'bg-sky-50 border-sky-200'
                           : 'bg-slate-50 border-slate-100 hover:border-sky-200'
-                        }`}
+                      }`}
                     >
                       <div className="text-xs text-slate-400 mb-0.5">
                         {formatTanggal(s.updatedAt)}
@@ -787,10 +844,11 @@ export default function App() {
                   confirmClear ? 'Klik lagi untuk menghapus percakapan' : 'Hapus percakapan ini'
                 }
                 title={confirmClear ? 'Klik lagi untuk menghapus' : 'Hapus percakapan ini'}
-                className={`flex items-center gap-1 p-1.5 rounded-full transition disabled:opacity-40 ${focusRing} ${confirmClear
+                className={`flex items-center gap-1 p-1.5 rounded-full transition disabled:opacity-40 ${focusRing} ${
+                  confirmClear
                     ? 'bg-red-50 text-red-600 hover:bg-red-100 px-2.5'
                     : 'text-slate-500 hover:bg-slate-100'
-                  }`}
+                }`}
               >
                 <Trash2 className="w-4 h-4" />
                 {confirmClear && <span className="text-xs font-bold">Hapus?</span>}
@@ -816,14 +874,16 @@ export default function App() {
                   className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`min-w-0 flex flex-col ${m.sender === 'user' ? 'items-end max-w-[85%]' : 'items-start max-w-[94%]'
-                      }`}
+                    className={`min-w-0 flex flex-col ${
+                      m.sender === 'user' ? 'items-end max-w-[85%]' : 'items-start max-w-[94%]'
+                    }`}
                   >
                     <div
-                      className={`min-w-0 max-w-full px-3.5 py-2 text-sm leading-relaxed break-words shadow-sm ${m.sender === 'user'
+                      className={`min-w-0 max-w-full px-3.5 py-2 text-sm leading-relaxed break-words shadow-sm ${
+                        m.sender === 'user'
                           ? 'whitespace-pre-wrap bg-sky-500 text-white rounded-2xl rounded-br-md'
                           : 'bg-slate-100 text-slate-800 rounded-2xl rounded-bl-md'
-                        }`}
+                      }`}
                     >
                       {m.sender === 'user' ? (
                         m.text
@@ -866,43 +926,81 @@ export default function App() {
 
         {/* Bagian bawah: saran pertanyaan, pilihan model, dan kolom input */}
         <div className="absolute z-30 bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-2xl flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            {/* Saran pertanyaan cepat */}
-            <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex items-end gap-2">
+            {/* Saran pertanyaan cepat (turun ke baris berikutnya kalau layar sempit) */}
+            <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">
               {SARAN_PERTANYAAN.map((chipText) => (
                 <button
                   key={chipText}
                   type="button"
                   onClick={() => handleSendMessage(null, chipText)}
                   disabled={isLoading}
-                  className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full bg-white/80 hover:bg-sky-500 hover:text-white border border-workshop-200 text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition disabled:opacity-50 ${focusRing}`}
+                  className={`whitespace-nowrap px-3 py-1.5 rounded-full bg-white/80 hover:bg-sky-500 hover:text-white border border-workshop-200 text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition disabled:opacity-50 ${focusRing}`}
                 >
                   {chipText}
                 </button>
               ))}
             </div>
 
-            {/* Dropdown pilihan model AI */}
-            <div className="relative shrink-0 pb-1">
-              <label htmlFor="model-ai" className="sr-only">
-                Pilih model AI
-              </label>
-              <Cpu className="pointer-events-none absolute left-2.5 top-[calc(50%-2px)] -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-              <select
-                id="model-ai"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
+            {/* Dropdown pilihan model AI: daftar pilihan terbuka ke atas */}
+            <div ref={modelWrapRef} className="relative shrink-0">
+              <button
+                ref={modelTriggerRef}
+                type="button"
+                onClick={() => setIsModelOpen((v) => !v)}
                 disabled={isLoading}
+                aria-haspopup="listbox"
+                aria-expanded={isModelOpen}
+                aria-label={`Model AI: ${namaModel(selectedModel)}. Klik untuk mengganti`}
                 title="Pilih model AI"
-                className={`appearance-none cursor-pointer rounded-full bg-white/80 hover:border-sky-400 border border-workshop-200 pl-8 pr-7 py-1.5 text-base sm:text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white/80 hover:border-sky-400 border border-workshop-200 pl-2.5 pr-2 py-1.5 text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`}
               >
-                {MODEL_OPTIONS.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-[calc(50%-2px)] -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <Cpu className="w-3.5 h-3.5 text-slate-500" />
+                {namaModel(selectedModel)}
+                <ChevronUp
+                  className={`w-3.5 h-3.5 text-slate-500 transition-transform ${
+                    isModelOpen ? '' : 'rotate-180'
+                  }`}
+                />
+              </button>
+
+              {isModelOpen && (
+                <div
+                  role="listbox"
+                  aria-label="Pilih model AI"
+                  onKeyDown={handleModelKeyDown}
+                  className="absolute bottom-full right-0 mb-2 w-60 rounded-2xl bg-white/95 backdrop-blur-xl border-2 border-workshop-200 shadow-2xl p-1.5 space-y-0.5"
+                >
+                  {MODEL_OPTIONS.map((o, i) => {
+                    const aktif = o.id === selectedModel;
+                    return (
+                      <button
+                        key={o.id}
+                        ref={(el) => {
+                          optionRefs.current[i] = el;
+                        }}
+                        type="button"
+                        role="option"
+                        aria-selected={aktif}
+                        onClick={() => pilihModel(o.id)}
+                        className={`w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left transition ${focusRing} ${
+                          aktif ? 'bg-sky-50 text-sky-700' : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-semibold leading-tight">
+                            {o.label}
+                          </span>
+                          <span className="block text-xs text-slate-500 leading-tight">
+                            {o.note}
+                          </span>
+                        </span>
+                        {aktif && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -917,8 +1015,9 @@ export default function App() {
               aria-label={isLogOpen ? 'Tutup log chat' : 'Lihat log chat'}
               aria-pressed={isLogOpen}
               title={isLogOpen ? 'Tutup log chat' : 'Lihat log chat'}
-              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition ${focusRing} ${isLogOpen ? 'bg-sky-100 text-sky-600' : 'text-slate-500 hover:bg-slate-100'
-                }`}
+              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition ${focusRing} ${
+                isLogOpen ? 'bg-sky-100 text-sky-600' : 'text-slate-500 hover:bg-slate-100'
+              }`}
             >
               <MessageCircle className="w-5 h-5" />
             </button>
